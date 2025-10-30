@@ -1,11 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'models/campaign.dart';
+import 'models/contribution.dart';
+import 'services/firestore_service.dart';
 
-void main() {
-  runApp(const CollegeFundApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  bool firebaseConfigured = false;
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
+    // Initialize sample data for development
+    await FirestoreService.initializeSampleData();
+    firebaseConfigured = true;
+  } catch (e) {
+    print('Firebase not configured properly: $e');
+    print('Running in demo mode with mock data');
+  }
+  
+  runApp(CollegeFundApp(firebaseConfigured: firebaseConfigured));
 }
 
 class CollegeFundApp extends StatelessWidget {
-  const CollegeFundApp({super.key});
+  final bool firebaseConfigured;
+  
+  const CollegeFundApp({super.key, required this.firebaseConfigured});
 
   @override
   Widget build(BuildContext context) {
@@ -15,37 +38,201 @@ class CollegeFundApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const CollegeFundPage(),
+      home: CollegeFundPage(firebaseConfigured: firebaseConfigured),
     );
   }
 }
 
 class CollegeFundPage extends StatefulWidget {
-  const CollegeFundPage({super.key});
+  final bool firebaseConfigured;
+  
+  const CollegeFundPage({super.key, required this.firebaseConfigured});
 
   @override
   State<CollegeFundPage> createState() => _CollegeFundPageState();
 }
 
 class _CollegeFundPageState extends State<CollegeFundPage> {
-  // Sample data - will be replaced with Firebase data later
-  final String campaignTitle = "College Fund for New Baby";
-  final String campaignDescription = 
-      "Help us save for our new baby's college education! Every contribution, big or small, makes a difference in securing their future.";
-  double totalRaised = 2450.00;
-  final double goalAmount = 10000.00;
-  
-  final List<Contributor> contributors = [
-    Contributor(name: "John & Sarah", amount: 500.00, isAnonymous: false),
-    Contributor(name: "Anonymous", amount: 250.00, isAnonymous: true),
-    Contributor(name: "Grandma Rose", amount: 1000.00, isAnonymous: false),
-    Contributor(name: "Anonymous", amount: 100.00, isAnonymous: true),
-    Contributor(name: "Uncle Mike", amount: 300.00, isAnonymous: false),
-    Contributor(name: "Anonymous", amount: 300.00, isAnonymous: true),
-  ];
+  Campaign? campaign;
+  List<Contribution> contributions = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCampaignData();
+  }
+
+  Future<void> _loadCampaignData() async {
+    if (widget.firebaseConfigured) {
+      try {
+        // Get the active campaign from Firebase
+        Campaign? activeCampaign = await FirestoreService.getActiveCampaign();
+        if (activeCampaign != null) {
+          // Get contributions for this campaign
+          List<Contribution> campaignContributions = 
+              await FirestoreService.getContributionsForCampaign(activeCampaign.id);
+          
+          setState(() {
+            campaign = activeCampaign;
+            contributions = campaignContributions;
+            isLoading = false;
+          });
+
+          // Set up real-time listeners
+          _setupRealtimeListeners(activeCampaign.id);
+        } else {
+          setState(() {
+            isLoading = false;
+          });
+        }
+      } catch (e) {
+        print('Error loading campaign data: $e');
+        _loadMockData();
+      }
+    } else {
+      // Load mock data when Firebase is not configured
+      _loadMockData();
+    }
+  }
+
+  void _loadMockData() {
+    // Create mock campaign data
+    Campaign mockCampaign = Campaign(
+      id: 'mock-campaign-id',
+      title: 'College Fund for New Baby',
+      description: 'Help us save for our little one\'s future education. Every contribution, big or small, makes a difference in building a bright future for our child.\n\n⚠️ Demo Mode: Firebase not configured. This is sample data.',
+      goalAmount: 10000.0,
+      currentAmount: 2450.0,
+      createdAt: DateTime.now().subtract(const Duration(days: 30)),
+      updatedAt: DateTime.now(),
+      isActive: true,
+    );
+
+    // Create mock contributions
+    List<Contribution> mockContributions = [
+      Contribution(
+        id: '1',
+        campaignId: 'mock-campaign-id',
+        contributorName: 'Sarah Johnson',
+        amount: 500.0,
+        isAnonymous: false,
+        paymentMethod: PaymentMethod.stripe,
+        status: ContributionStatus.completed,
+        createdAt: DateTime.now().subtract(const Duration(days: 25)),
+        completedAt: DateTime.now().subtract(const Duration(days: 25)),
+      ),
+      Contribution(
+        id: '2',
+        campaignId: 'mock-campaign-id',
+        contributorName: null,
+        amount: 250.0,
+        isAnonymous: true,
+        paymentMethod: PaymentMethod.interac,
+        status: ContributionStatus.completed,
+        createdAt: DateTime.now().subtract(const Duration(days: 20)),
+        completedAt: DateTime.now().subtract(const Duration(days: 20)),
+      ),
+      Contribution(
+        id: '3',
+        campaignId: 'mock-campaign-id',
+        contributorName: 'Mike Chen',
+        amount: 750.0,
+        isAnonymous: false,
+        paymentMethod: PaymentMethod.stripe,
+        status: ContributionStatus.completed,
+        createdAt: DateTime.now().subtract(const Duration(days: 15)),
+        completedAt: DateTime.now().subtract(const Duration(days: 15)),
+      ),
+      Contribution(
+        id: '4',
+        campaignId: 'mock-campaign-id',
+        contributorName: 'Emily Davis',
+        amount: 300.0,
+        isAnonymous: false,
+        paymentMethod: PaymentMethod.interac,
+        status: ContributionStatus.completed,
+        createdAt: DateTime.now().subtract(const Duration(days: 10)),
+        completedAt: DateTime.now().subtract(const Duration(days: 10)),
+      ),
+      Contribution(
+        id: '5',
+        campaignId: 'mock-campaign-id',
+        contributorName: null,
+        amount: 400.0,
+        isAnonymous: true,
+        paymentMethod: PaymentMethod.stripe,
+        status: ContributionStatus.completed,
+        createdAt: DateTime.now().subtract(const Duration(days: 5)),
+        completedAt: DateTime.now().subtract(const Duration(days: 5)),
+      ),
+      Contribution(
+        id: '6',
+        campaignId: 'mock-campaign-id',
+        contributorName: 'David Wilson',
+        amount: 250.0,
+        isAnonymous: false,
+        paymentMethod: PaymentMethod.interac,
+        status: ContributionStatus.completed,
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
+        completedAt: DateTime.now().subtract(const Duration(days: 2)),
+      ),
+    ];
+
+    setState(() {
+      campaign = mockCampaign;
+      contributions = mockContributions;
+      isLoading = false;
+    });
+  }
+
+  void _setupRealtimeListeners(String campaignId) {
+    // Listen to campaign changes
+    FirestoreService.watchCampaign(campaignId).listen((updatedCampaign) {
+      if (updatedCampaign != null && mounted) {
+        setState(() {
+          campaign = updatedCampaign;
+        });
+      }
+    });
+
+    // Listen to contributions changes
+    FirestoreService.watchContributionsForCampaign(campaignId).listen((updatedContributions) {
+      if (mounted) {
+        setState(() {
+          contributions = updatedContributions;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: const Text('College Fund'),
+          centerTitle: true,
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (campaign == null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: const Text('College Fund'),
+          centerTitle: true,
+        ),
+        body: const Center(
+          child: Text('No active campaign found'),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
@@ -59,7 +246,7 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
           children: [
             // Campaign Title
             Text(
-              campaignTitle,
+              campaign!.title,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -68,7 +255,7 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
             
             // Campaign Description
             Text(
-              campaignDescription,
+              campaign!.description,
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 24),
@@ -88,7 +275,7 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         Text(
-                          '\$${totalRaised.toStringAsFixed(2)}',
+                          '\$${campaign!.currentAmount.toStringAsFixed(2)}',
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             color: Colors.green,
                             fontWeight: FontWeight.bold,
@@ -98,7 +285,7 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: totalRaised / goalAmount,
+                      value: campaign!.currentAmount / campaign!.goalAmount,
                       backgroundColor: Colors.grey[300],
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                     ),
@@ -107,11 +294,11 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '${(totalRaised / goalAmount * 100).toStringAsFixed(1)}% of goal',
+                          '${campaign!.progressPercentage.toStringAsFixed(1)}% of goal',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         Text(
-                          'Goal: \$${goalAmount.toStringAsFixed(2)}',
+                          'Goal: \$${campaign!.goalAmount.toStringAsFixed(2)}',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
@@ -124,7 +311,7 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
             
             // Contributors Section
             Text(
-              'Contributors (${contributors.length})',
+              'Contributors (${contributions.length})',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -135,22 +322,22 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: contributors.length,
+              itemCount: contributions.length,
               itemBuilder: (context, index) {
-                final contributor = contributors[index];
+                final contribution = contributions[index];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.blue,
                       child: Text(
-                        contributor.isAnonymous ? '?' : contributor.name[0],
+                        contribution.isAnonymous ? '?' : contribution.displayName[0],
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
-                    title: Text(contributor.name),
+                    title: Text(contribution.displayName),
                     trailing: Text(
-                      '\$${contributor.amount.toStringAsFixed(2)}',
+                      '\$${contribution.amount.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.green,
@@ -187,29 +374,21 @@ class _CollegeFundPageState extends State<CollegeFundPage> {
   }
 
   void _showContributionDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return const ContributionDialog();
-      },
-    );
+    if (campaign != null) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return ContributionDialog(campaignId: campaign!.id);
+        },
+      );
+    }
   }
 }
 
-class Contributor {
-  final String name;
-  final double amount;
-  final bool isAnonymous;
-
-  Contributor({
-    required this.name,
-    required this.amount,
-    required this.isAnonymous,
-  });
-}
-
 class ContributionDialog extends StatefulWidget {
-  const ContributionDialog({super.key});
+  final String campaignId;
+  
+  const ContributionDialog({super.key, required this.campaignId});
 
   @override
   State<ContributionDialog> createState() => _ContributionDialogState();
@@ -330,19 +509,59 @@ class _ContributionDialogState extends State<ContributionDialog> {
     );
   }
 
-  void _processContribution() {
+  Future<void> _processContribution() async {
     final amount = double.parse(_amountController.text);
-    final name = _isAnonymous ? 'Anonymous' : _nameController.text;
+    final name = _isAnonymous ? null : _nameController.text;
     
-    if (_paymentMethod == 'stripe') {
-      // TODO: Integrate with Stripe
-      _showPaymentInstructions('Stripe payment integration coming soon!');
-    } else {
-      // Show Interac instructions
-      _showPaymentInstructions(
-        'Please send \$${amount.toStringAsFixed(2)} via Interac e-Transfer to: collegefund@example.com\n\n'
-        'Your contribution will be added to the total once payment is received.'
-      );
+    if (widget.campaignId == 'mock-campaign-id') {
+      // Demo mode - show instructions without saving to Firebase
+      if (_paymentMethod == 'stripe') {
+        _showPaymentInstructions(
+          '🎯 Demo Mode\n\n'
+          'Stripe payment integration coming soon!\n\n'
+          'In a real deployment with Firebase configured, your contribution would be recorded and processed once payment is completed.'
+        );
+      } else {
+        _showPaymentInstructions(
+          '🎯 Demo Mode\n\n'
+          'Please send \$${amount.toStringAsFixed(2)} via Interac e-Transfer to: collegefund@example.com\n\n'
+          'In a real deployment with Firebase configured, your contribution would be recorded and added to the total once payment is received.'
+        );
+      }
+      return;
+    }
+
+    // Real Firebase mode
+    Contribution contribution = Contribution(
+      id: '',
+      campaignId: widget.campaignId,
+      contributorName: name,
+      amount: amount,
+      isAnonymous: _isAnonymous,
+      paymentMethod: _paymentMethod == 'stripe' ? PaymentMethod.stripe : PaymentMethod.interac,
+      status: ContributionStatus.pending,
+      createdAt: DateTime.now(),
+    );
+
+    try {
+      String? contributionId = await FirestoreService.createContribution(contribution);
+      
+      if (contributionId != null) {
+        if (_paymentMethod == 'stripe') {
+          // TODO: Integrate with Stripe
+          _showPaymentInstructions('Stripe payment integration coming soon!\n\nYour contribution has been recorded and will be processed once payment is completed.');
+        } else {
+          // Show Interac instructions
+          _showPaymentInstructions(
+            'Please send \$${amount.toStringAsFixed(2)} via Interac e-Transfer to: collegefund@example.com\n\n'
+            'Your contribution has been recorded and will be added to the total once payment is received.'
+          );
+        }
+      } else {
+        _showErrorMessage('Failed to record contribution. Please try again.');
+      }
+    } catch (e) {
+      _showErrorMessage('Error processing contribution: $e');
     }
   }
 
@@ -352,6 +571,23 @@ class _ContributionDialogState extends State<ContributionDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Payment Instructions'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorMessage(String message) {
+    Navigator.of(context).pop();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
         content: Text(message),
         actions: [
           TextButton(
