@@ -1,0 +1,10 @@
+{
+  "name": "College Fund",
+  "short_name": "Fund",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#003366",
+  "description": "Track pledges and contributions for Baby Avery's college fund.",
+  "icons": []
+}
